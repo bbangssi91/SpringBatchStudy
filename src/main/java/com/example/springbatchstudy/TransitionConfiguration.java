@@ -1,6 +1,7 @@
 package com.example.springbatchstudy;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.batch.core.ExitStatus;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
 import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
@@ -13,46 +14,39 @@ import org.springframework.context.annotation.Configuration;
 
 @RequiredArgsConstructor
 @Configuration
-public class FlowConfiguration {
+public class TransitionConfiguration {
 
     private final JobBuilderFactory jobBuilderFactory;
     private final StepBuilderFactory stepBuilderFactory;
 
     @Bean
     public Job batchJob(){
+        // 총 3개의 Flow
         return jobBuilderFactory.get("batchJob")
-                .start(flow1())
-                .next(step3())
-                .next(flow2())
-                .next(step6())
-                .end()
+                .start(step1())
+                    .on("FAILED")
+                    .to(step2())
+                    .on("FAILED")
+                    .stop()
+                .from(step1())
+                    .on("*")
+                    .to(step3())
+                    .next(step4())
+                .from(step2())
+                    .on("*")
+                    .to(step5())
+                    .end()
                 .build();
     }
 
-    @Bean
-    public Flow flow1() {
-        FlowBuilder<Flow> flowBuilder = new FlowBuilder<>("flowA");
-        flowBuilder.start(step1())
-                .next(step2())
-                .end();
-
-        return flowBuilder.build();
-    }
-
-    @Bean
-    public Flow flow2() {
-        FlowBuilder<Flow> flowBuilder = new FlowBuilder<>("flowB");
-        flowBuilder.start(step3())
-                .next(step4())
-                .end();
-
-        return flowBuilder.build();
-    }
 
     @Bean
     public Step step1() {
         return stepBuilderFactory.get("step1")
-                .tasklet((stepContribution, chunkContext) -> RepeatStatus.FINISHED)
+                .tasklet((stepContribution, chunkContext) -> {
+                    stepContribution.setExitStatus(ExitStatus.FAILED);
+                    return RepeatStatus.FINISHED;
+                })
                 .build();
     }
 
@@ -83,12 +77,4 @@ public class FlowConfiguration {
                 .tasklet((stepContribution, chunkContext) -> RepeatStatus.FINISHED)
                 .build();
     }
-
-    @Bean
-    public Step step6() {
-        return stepBuilderFactory.get("step6")
-                .tasklet((stepContribution, chunkContext) -> RepeatStatus.FINISHED)
-                .build();
-    }
-
 }
