@@ -6,18 +6,17 @@ import org.springframework.batch.core.Step;
 import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
 import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
 import org.springframework.batch.item.ItemProcessor;
+import org.springframework.batch.item.ItemReader;
 import org.springframework.batch.item.ItemWriter;
-import org.springframework.batch.item.support.ListItemReader;
 import org.springframework.batch.repeat.RepeatStatus;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.util.Arrays;
-import java.util.List;
 
 @RequiredArgsConstructor
 @Configuration
-public class ChunkOrientedTaskletConfiguration {
+public class ItemReader_ItemProcessor_ItemWriter_Configuration {
 
     private final JobBuilderFactory jobBuilderFactory;
     private final StepBuilderFactory stepBuilderFactory;
@@ -33,10 +32,10 @@ public class ChunkOrientedTaskletConfiguration {
     @Bean
     public Step step1() {
         return stepBuilderFactory.get("step1")
-                .<String, String>chunk(2)
-                .reader(new ListItemReader<>(Arrays.asList("item1", "item2", "item3", "item4", "item5", "item6")))
-                .processor((ItemProcessor<String, String>) s -> "My_" + s)
-                .writer(list -> System.out.println("list = " + list))
+                .<Customer, Customer>chunk(3)
+                .reader(itemReader())
+                .processor(itemProcessor())
+                .writer(itemWriter())
                 .build();
     }
 
@@ -45,6 +44,25 @@ public class ChunkOrientedTaskletConfiguration {
         return stepBuilderFactory.get("step2")
                 .tasklet((stepContribution, chunkContext) -> RepeatStatus.FINISHED)
                 .build();
+    }
+
+    @Bean
+    public ItemReader<? extends Customer> itemReader() {
+        return new CustomItemReader(Arrays.asList(
+                new Customer("user1"),
+                new Customer("user2"),
+                new Customer("user3")
+        ));
+    }
+
+    @Bean
+    public ItemProcessor<? super Customer, ? extends Customer> itemProcessor() {
+        return new CustomItemProcessor();
+    }
+
+    @Bean
+    public ItemWriter<? super Customer> itemWriter() {
+        return new CustomItemWriter();
     }
 
 }
