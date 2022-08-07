@@ -3,18 +3,12 @@ package com.example.springbatchstudy;
 import lombok.RequiredArgsConstructor;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
-import org.springframework.batch.core.StepContribution;
 import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
-import org.springframework.batch.core.configuration.annotation.JobScope;
 import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
-import org.springframework.batch.core.configuration.annotation.StepScope;
-import org.springframework.batch.core.scope.context.ChunkContext;
-import org.springframework.batch.core.step.tasklet.Tasklet;
 import org.springframework.batch.item.ItemProcessor;
 import org.springframework.batch.item.ItemWriter;
 import org.springframework.batch.item.support.ListItemReader;
 import org.springframework.batch.repeat.RepeatStatus;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -23,7 +17,7 @@ import java.util.List;
 
 @RequiredArgsConstructor
 @Configuration
-public class ChunkConfiguration {
+public class ChunkOrientedTaskletConfiguration {
 
     private final JobBuilderFactory jobBuilderFactory;
     private final StepBuilderFactory stepBuilderFactory;
@@ -39,17 +33,10 @@ public class ChunkConfiguration {
     @Bean
     public Step step1() {
         return stepBuilderFactory.get("step1")
-                .<String, String>chunk(5)// [ chunkSize = 5, List.size() = 5 -> commit count = 2 ]
-                .reader(new ListItemReader<>(Arrays.asList("item1", "item2", "item3", "item4", "item5")))
-                .processor((ItemProcessor<String, String>) s -> {
-                    Thread.sleep(300);
-                    System.out.println("s = " + s);
-                    return "My-" + s;
-                })
-                .writer(list -> {
-                    Thread.sleep(300);
-                    System.out.println("list = " + list);
-                })
+                .<String, String>chunk(2)
+                .reader(new ListItemReader<>(Arrays.asList("item1", "item2", "item3", "item4", "item5", "item6")))
+                .processor((ItemProcessor<String, String>) s -> "My_" + s)
+                .writer(list -> System.out.println("list = " + list))
                 .build();
     }
 
@@ -59,7 +46,5 @@ public class ChunkConfiguration {
                 .tasklet((stepContribution, chunkContext) -> RepeatStatus.FINISHED)
                 .build();
     }
-
-
 
 }
