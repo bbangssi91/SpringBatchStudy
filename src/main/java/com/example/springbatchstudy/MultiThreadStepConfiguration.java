@@ -18,6 +18,8 @@ import org.springframework.batch.item.database.support.MySqlPagingQueryProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.task.SimpleAsyncTaskExecutor;
+import org.springframework.core.task.TaskExecutor;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import javax.sql.DataSource;
 import java.util.HashMap;
@@ -25,7 +27,7 @@ import java.util.Map;
 
 @RequiredArgsConstructor
 @Configuration
-public class JdbcBatchConfiguration {
+public class MultiThreadStepConfiguration {
 
     private final JobBuilderFactory jobBuilderFactory;
     private final StepBuilderFactory stepBuilderFactory;
@@ -46,9 +48,23 @@ public class JdbcBatchConfiguration {
         return stepBuilderFactory.get("asyncStep1")
                 .<Customer, Customer>chunk(100)
                 .reader(pagingItemReader())
-                .processor(asyncItemProcessor())
-                .writer(asyncItemWriter())
+                .listener(new CustomItemReadListener())
+                .processor(customItemProcessor())
+                .listener(new CustomItemProcessListener())
+                .writer(customItemWriter())
+                .listener(new CustomItemWriterListener())
+                .taskExecutor(taskExecutor()) // set async
                 .build();
+    }
+
+    @Bean
+    public TaskExecutor taskExecutor() {
+        ThreadPoolTaskExecutor taskExecutor = new ThreadPoolTaskExecutor();
+        taskExecutor.setCorePoolSize(4);
+        taskExecutor.setMaxPoolSize(8);
+        taskExecutor.setThreadNamePrefix("Async-thread");
+
+        return taskExecutor;
     }
 
     @Bean
@@ -86,7 +102,7 @@ public class JdbcBatchConfiguration {
             @Override
             public Customer process(Customer customer) throws Exception {
 
-                Thread.sleep(100);
+                Thread.sleep(30);
                 return new Customer(customer.getId(), customer.getFirstName().toUpperCase()
                 , customer.getLastName().toUpperCase(), customer.getBirthdate());
 
@@ -96,12 +112,12 @@ public class JdbcBatchConfiguration {
     }
 
     @Bean
-    public ItemReader<? extends Customer> pagingItemReader() throws Exception {
+    public JdbcPagingItemReader<Customer> pagingItemReader() throws Exception {
 
         JdbcPagingItemReader<Customer> reader = new JdbcPagingItemReader<>();
 
         reader.setDataSource(dataSource);
-        reader.setFetchSize(300);
+        reader.setFetchSize(100);
         reader.setRowMapper(new CustomRowMapper());
 
         MySqlPagingQueryProvider queryProvider = new MySqlPagingQueryProvider();
