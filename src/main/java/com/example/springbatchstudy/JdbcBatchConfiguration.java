@@ -9,6 +9,7 @@ import org.springframework.batch.item.ItemReader;
 import org.springframework.batch.item.ItemWriter;
 import org.springframework.batch.item.database.Order;
 import org.springframework.batch.item.database.PagingQueryProvider;
+import org.springframework.batch.item.database.builder.JdbcBatchItemWriterBuilder;
 import org.springframework.batch.item.database.builder.JdbcPagingItemReaderBuilder;
 import org.springframework.batch.item.database.support.SqlPagingQueryProviderFactoryBean;
 import org.springframework.context.annotation.Bean;
@@ -21,7 +22,7 @@ import java.util.Map;
 
 @RequiredArgsConstructor
 @Configuration
-public class JobPagingConfiguration {
+public class JdbcBatchConfiguration {
 
     private final JobBuilderFactory jobBuilderFactory;
     private final StepBuilderFactory stepBuilderFactory;
@@ -78,11 +79,11 @@ public class JobPagingConfiguration {
 
     @Bean
     public ItemWriter<Customer> customItemWriter() {
-        return items -> {
-            for(Customer item : items){
-                System.out.println(item);
-            }
-        };
+        return new JdbcBatchItemWriterBuilder<Customer>()
+                .dataSource(dataSource)
+                .sql("insert into customer2 values (:id, :firstName, :lastName, :birthdate)")
+                .beanMapped()
+                .build();
     }
 
 
