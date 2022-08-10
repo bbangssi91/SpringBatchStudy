@@ -2,28 +2,19 @@ package com.example.springbatchstudy;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.batch.core.Job;
-import org.springframework.batch.core.Step;
 import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
 import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
+import org.springframework.batch.core.job.builder.FlowBuilder;
+import org.springframework.batch.core.job.flow.Flow;
 import org.springframework.batch.core.launch.support.RunIdIncrementer;
-import org.springframework.batch.integration.async.AsyncItemProcessor;
-import org.springframework.batch.integration.async.AsyncItemWriter;
-import org.springframework.batch.item.ItemProcessor;
-import org.springframework.batch.item.ItemReader;
-import org.springframework.batch.item.ItemWriter;
-import org.springframework.batch.item.database.JdbcPagingItemReader;
-import org.springframework.batch.item.database.Order;
-import org.springframework.batch.item.database.builder.JdbcBatchItemWriterBuilder;
-import org.springframework.batch.item.database.support.MySqlPagingQueryProvider;
+import org.springframework.batch.core.step.tasklet.Tasklet;
+import org.springframework.batch.core.step.tasklet.TaskletStep;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.task.SimpleAsyncTaskExecutor;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import javax.sql.DataSource;
-import java.util.HashMap;
-import java.util.Map;
 
 @RequiredArgsConstructor
 @Configuration
@@ -37,110 +28,58 @@ public class MultiThreadStepConfiguration {
     public Job batchJob() throws Exception {
         return jobBuilderFactory.get("batchJob")
                 .incrementer(new RunIdIncrementer())
-                //.start(step1())
-                .start(asyncStep1())
+                .start(flow1())
+                //.next(flow2())
+                .split(taskExecutor()).add(flow2())
+                .end()
                 .listener(new StopWatchJobListener())
                 .build();
     }
 
     @Bean
-    public Step asyncStep1() throws Exception {
-        return stepBuilderFactory.get("asyncStep1")
-                .<Customer, Customer>chunk(100)
-                .reader(pagingItemReader())
-                .listener(new CustomItemReadListener())
-                .processor(customItemProcessor())
-                .listener(new CustomItemProcessListener())
-                .writer(customItemWriter())
-                .listener(new CustomItemWriterListener())
-                .taskExecutor(taskExecutor()) // set async
+    public Flow flow1() {
+        TaskletStep step1 = stepBuilderFactory.get("step1")
+                .tasklet(tasklet())
+                .build();
+
+        return new FlowBuilder<Flow>("flow1")
+                .start(step1)
                 .build();
     }
 
     @Bean
-    public TaskExecutor taskExecutor() {
-        ThreadPoolTaskExecutor taskExecutor = new ThreadPoolTaskExecutor();
-        taskExecutor.setCorePoolSize(4);
-        taskExecutor.setMaxPoolSize(8);
-        taskExecutor.setThreadNamePrefix("Async-thread");
+    public Flow flow2() {
+        TaskletStep step2 = stepBuilderFactory.get("step2")
+                .tasklet(tasklet())
+                .build();
 
-        return taskExecutor;
-    }
+        TaskletStep step3 = stepBuilderFactory.get("step3")
+                .tasklet(tasklet())
+                .build();
 
-    @Bean
-    public AsyncItemProcessor asyncItemProcessor() throws InterruptedException {
-        AsyncItemProcessor<Customer, Customer> asyncItemProcessor = new AsyncItemProcessor<>();
-        asyncItemProcessor.setDelegate(customItemProcessor());
-        asyncItemProcessor.setTaskExecutor(new SimpleAsyncTaskExecutor());
-
-        return asyncItemProcessor;
-    }
-
-    @Bean
-    public AsyncItemWriter asyncItemWriter() throws Exception {
-
-        AsyncItemWriter<Customer> asyncItemWriter = new AsyncItemWriter<>();
-        asyncItemWriter.setDelegate(customItemWriter());
-
-        return asyncItemWriter;
-    }
-
-    @Bean
-    public Step step1() throws Exception {
-        return stepBuilderFactory.get("step1")
-                .<Customer, Customer>chunk(100)
-                .reader(pagingItemReader())
-                .processor(customItemProcessor())
-                .writer(customItemWriter())
+        return new FlowBuilder<Flow>("flow2")
+                .start(step2)
+                .next(step3)
                 .build();
     }
 
+
+
     @Bean
-    public ItemProcessor<Customer, Customer> customItemProcessor() throws InterruptedException {
-
-        return new ItemProcessor<Customer, Customer>() {
-            @Override
-            public Customer process(Customer customer) throws Exception {
-
-                Thread.sleep(30);
-                return new Customer(customer.getId(), customer.getFirstName().toUpperCase()
-                , customer.getLastName().toUpperCase(), customer.getBirthdate());
-
-            }
-        };
-
+    public Tasklet tasklet() {
+        return new CustomTasklet();
     }
 
     @Bean
-    public JdbcPagingItemReader<Customer> pagingItemReader() throws Exception {
+    public TaskExecutor taskExecutor(){
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setThreadNamePrefix("Async-Thread");
+        executor.setCorePoolSize(4);
+        executor.setMaxPoolSize(8);
+        executor.setDaemon(true);
 
-        JdbcPagingItemReader<Customer> reader = new JdbcPagingItemReader<>();
-
-        reader.setDataSource(dataSource);
-        reader.setFetchSize(100);
-        reader.setRowMapper(new CustomRowMapper());
-
-        MySqlPagingQueryProvider queryProvider = new MySqlPagingQueryProvider();
-        queryProvider.setSelectClause("id, firstName, lastName, birthdate");
-        queryProvider.setFromClause("from customer");
-
-        Map<String, Order> sortKeys = new HashMap<>();
-        sortKeys.put("id", Order.ASCENDING);
-
-        queryProvider.setSortKeys(sortKeys);
-
-        reader.setQueryProvider(queryProvider);
-
-        return reader;
+        return executor;
     }
 
-    @Bean
-    public ItemWriter<Customer> customItemWriter() {
-        return new JdbcBatchItemWriterBuilder<Customer>()
-                .dataSource(dataSource)
-                .sql("insert into customer2 values (:id, :firstName, :lastName, :birthdate)")
-                .beanMapped()
-                .build();
-    }
 
 }
